@@ -1,0 +1,100 @@
+# @package _global_
+
+# This configuration will use SimCLR to pretrain
+# a ResNet-50 encoder for DeepLabV3 on the
+# unlabelled EchoNet-Dynamic data
+
+# to execute this experiment run:
+# python run.py experiment=echonet_simclr.yaml
+
+description: Echonet
+exp_name: exp_echonet_simclr
+
+defaults:
+  - override /trainer: default.yaml
+  - override /model: null
+  - override /datamodule: null
+  - override /callbacks: default.yaml
+  - override /logger: null
+
+
+# we override default configurations with nulls to prevent them from loading at all
+# instead we define all modules and their paths directly in this config,
+# so everything is stored in one place
+
+seed: 3407
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  gpus: 0
+  min_epochs: 1
+  max_epochs: 300
+  strategy: ddp
+  #gradient_clip_val: 0.5
+  #accumulate_grad_batches: 2
+  weights_summary: null
+  # resume_from_checkpoint: ${work_dir}/last.ckpt
+
+model:
+  _target_: src.models.simclr_model.SimCLR
+  gpus: 1
+  num_samples: 7459
+  batch_size: 128
+  dataset: cifar10
+  num_nodes: 1
+  arch: resnet50
+  hidden_mlp: 2048
+  feat_dim: 128
+  warmup_epochs: 10
+  max_epochs: 300
+  temperature: 0.1
+  first_conv: True
+  maxpool1: True
+  optimizer: adam
+  exclude_bn_bias: False
+  start_lr: 0.0
+  learning_rate: 1e-3
+  final_lr: 0.0
+  weight_decay: 1e-6
+
+datamodule:
+  _target_: src.datamodules.echonet_simclr_datamodule.EchonetSimCLRDataModule
+  data_dir: /data/echonet/pretraining/
+  batch_size: 64
+  train_val_test_split: [55_000, 5_000, 10_000]
+  num_workers: 4
+  pin_memory: False
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: "val_loss"
+    save_top_k: 2
+    save_last: True
+    mode: "min"
+    dirpath: "checkpoints/"
+    filename: "echonet-{epoch:02d}"
+    #early_stopping:
+    #_target_: pytorch_lightning.callbacks.EarlyStopping
+    #monitor: "val_loss"
+    #patience: 10
+    #mode: "min"
+
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.wandb.WandbLogger
+    project: "echo_miua"
+    notes: ${description}
+    name: ${exp_name}
+    save_dir: "./"
+    offline: False # set True to store all logs only locally
+    id: ${exp_name} # pass correct id to resume experiment!
+    #entity: ""  # set to name of your wandb team or just remove it
+    log_model: True
+    prefix: ""
+    job_type: "train"
+    group: ""
+  neptune:
+    tags: ["best_model"]
+  csv_logger:
+    save_dir: "."

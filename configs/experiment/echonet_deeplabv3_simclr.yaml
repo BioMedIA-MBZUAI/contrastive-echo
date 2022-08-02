@@ -1,0 +1,89 @@
+# @package _global_
+
+# This is a sample experiment to run segmentation
+# training with a DeepLabV3 model using an encoder 
+# pretrained on the EchoNet-Dynamic dataset with SimCLR
+
+description: Echonet
+exp_name: exp_segmentation_echonet_deeplabv3_simclr_pretrained
+
+defaults:
+  - override /trainer: default.yaml
+  - override /model: null
+  - override /datamodule: null
+  - override /callbacks: default.yaml
+  - override /logger: null
+
+seed: 3407
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  gpus: 0
+  min_epochs: 1
+  max_epochs: 50
+  #gradient_clip_val: 0.5
+  #accumulate_grad_batches: 2
+  weights_summary: null
+  # resume_from_checkpoint: ${work_dir}/last.ckpt
+
+model:
+  _target_: src.models.deeplabv3_model.DeepLabV3Model
+  model_name: deeplabv3_resnet50
+  num_classes: 1
+  pretrained: False
+  simclr:
+    resnet_type: resnet50
+    model_path: #path/to/model.ckpt
+    num_samples: 14920
+    batch_size: 128
+    temperature: 0.05
+  lr: 1e-4
+  weight_decay: 1e-5
+  optimizer:
+    name: madgrad
+    momentum: 0.9 # For SGD
+  lr_scheduler:
+    step_period: null # For StepLR
+
+datamodule:
+  _target_: src.datamodules.echonet_datamodule.EchonetDataModule
+  data_dir: /data/echonet/pretraining
+  batch_size: 128
+  train_val_test_split: [55_000, 5_000, 10_000]
+  num_workers: 4
+  pin_memory: False
+  data_size: 1
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: "val/loss"
+    save_top_k: 2
+    save_last: True
+    mode: "min"
+    dirpath: "checkpoints/"
+    filename: "echonet-{epoch:02d}"
+    #early_stopping:
+    #_target_: pytorch_lightning.callbacks.EarlyStopping
+    #monitor: "val/loss"
+    #patience: 10
+    #mode: "min"
+
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.wandb.WandbLogger
+    project: "echo_miua"
+    notes: ${description}
+    name: ${exp_name}
+    save_dir: "./"
+    offline: False # set True to store all logs only locally
+    id: ${exp_name} # pass correct id to resume experiment!
+    #entity: ""  # set to name of your wandb team or just remove it
+    log_model: True
+    prefix: ""
+    job_type: "train"
+    group: ""
+  neptune:
+    tags: ["best_model"]
+  csv_logger:
+    save_dir: "."
