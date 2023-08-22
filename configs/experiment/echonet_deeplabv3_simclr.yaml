@@ -47,7 +47,7 @@ model:
 
 datamodule:
   _target_: src.datamodules.echonet_datamodule.EchonetDataModule
-  data_dir: /data/echonet/pretraining
+  data_dir: ${work_dir}/data/echonet/segmentation
   batch_size: 128
   train_val_test_split: [55_000, 5_000, 10_000]
   num_workers: 4
